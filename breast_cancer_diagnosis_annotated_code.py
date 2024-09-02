@@ -1,30 +1,29 @@
-# Breast Cancer Diagnosis Using Machine Learning
+# Healthcare Cost Prediction Using Regression Analysis
 
 # Objective:
-# Develop machine learning models to diagnose breast cancer based on various tumor characteristics.
-# The focus is on improving diagnostic accuracy to support early detection and effective treatment.
+# Develop a regression model to predict healthcare costs using patient demographics, health metrics, and lifestyle factors. 
+# The focus is on identifying key cost drivers that help optimize pricing and resource allocation for healthcare providers and insurers.
 
 # Key Points:
 # - End-to-end analysis covering data preprocessing, model development, and evaluation.
-# - Dataset: UCI Machine Learning Repository - Breast Cancer Wisconsin (Diagnostic) Dataset
-# - Techniques: Logistic Regression, Random Forest, XGBoost, and model evaluation using ROC-AUC and confusion matrices.
-# - Insights: The models demonstrated high accuracy and effectiveness in differentiating between malignant and benign tumors.
+# - Dataset: Kaggle - Medical Cost Personal Dataset
+# - Techniques: Linear regression, feature engineering, and performance evaluation (R²: 0.784, MSE: 33,596,915).
+# - Insights: Smoking status, BMI, and age are significant predictors of healthcare costs.
 
 # Import necessary libraries
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from sklearn.metrics import roc_auc_score, confusion_matrix, classification_report
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.metrics import mean_squared_error, r2_score
+import statsmodels.api as sm
 
 # 1. Data Loading and Overview
-# Load the dataset containing tumor characteristics and diagnosis labels
-file_path = 'path_to_breast_cancer_data.csv'  # Update the path as needed
+# Load the dataset containing patient demographics, lifestyle factors, and healthcare charges
+file_path = r"C:\Users\YourUser\Desktop\Data Sets\insurance.csv"  # Update the path as needed
 df = pd.read_csv(file_path)
 
 # Initial data overview: Understanding the structure and summary statistics of the dataset
@@ -33,60 +32,94 @@ print(df.describe())  # Summary statistics for numerical features
 print(df.info())  # Information about data types and missing values
 
 # 2. Data Preprocessing
-# Convert categorical labels to numeric: 'M' for malignant and 'B' for benign
-df['diagnosis'] = df['diagnosis'].apply(lambda x: 1 if x == 'M' else 0)
+# Convert 'sex' to numeric: 1 for male, 0 for female
+df['sex'] = df['sex'].apply(lambda x: 1 if x == 'male' else 0)
 
-# Drop the 'id' column as it is not needed for the analysis
-df.drop(columns=['id'], inplace=True)
+# Convert 'smoker' to numeric: 1 for yes, 0 for no
+df['smoker'] = df['smoker'].apply(lambda x: 1 if x == 'yes' else 0)
+
+# Drop the 'region' column as it is not needed for the analysis
+df.drop(columns=['region'], inplace=True)
 
 # Separate features and target variable
-X = df.drop(columns=['diagnosis'])  # Features: tumor characteristics
-y = df['diagnosis']  # Target: tumor diagnosis
+X = df.drop(columns=['charges'])  # Features: 'age', 'sex', 'bmi', 'children', 'smoker'
+y = df['charges']  # Target variable
 
-# Standardize the features
+# Standardize features for better model performance
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# 3. Model Development
-# Split the dataset into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+# 3. Model Development and Evaluation
 
-# Initialize and train models
+# Split data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+
+# Initialize models
 models = {
-    'Logistic Regression': LogisticRegression(),
-    'Random Forest': RandomForestClassifier(),
-    'XGBoost': XGBClassifier()
+    'Linear Regression': LinearRegression(),
+    'Ridge Regression': Ridge(),
+    'Lasso Regression': Lasso()
 }
 
 # Train and evaluate models
+results = {}
 for name, model in models.items():
-    print(f"Training and evaluating {name}...")
+    # Fit the model
     model.fit(X_train, y_train)
+    
+    # Predict and evaluate
     y_pred = model.predict(X_test)
-    print(f"{name} ROC-AUC: {roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])}")
-    print(confusion_matrix(y_test, y_pred))
-    print(classification_report(y_test, y_pred))
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    
+    results[name] = {
+        'MSE': mse,
+        'R²': r2
+    }
+    
+    print(f"{name} Results:")
+    print(f"Mean Squared Error (MSE): {mse}")
+    print(f"R-Squared (R²): {r2}")
+    print("-" * 30)
 
-# 4. Conclusion
-# The machine learning models applied to the breast cancer dataset have demonstrated strong performance in distinguishing between malignant and benign tumors. 
-# The Random Forest and XGBoost models provided particularly high accuracy and ROC-AUC scores, indicating their robustness and effectiveness for this classification task.
-# Key Insights:
-# - **Logistic Regression** offered a straightforward and interpretable model with good performance.
-# - **Random Forest** achieved a high ROC-AUC score, highlighting its effectiveness in handling complex relationships within the data.
-# - **XGBoost** delivered the best performance overall, underscoring its power in feature interactions and non-linear relationships.
+# Perform cross-validation
+kf = KFold(n_splits=10, random_state=42, shuffle=True)
+cv_results = {}
+for name, model in models.items():
+    cv_scores = cross_val_score(model, X_scaled, y, cv=kf, scoring='r2')
+    cv_results[name] = np.mean(cv_scores)
+    print(f"{name} Cross-Validation R²: {np.mean(cv_scores)}")
 
-# 5. Future Work Recommendations
-# - **Model Tuning and Hyperparameter Optimization:** Further fine-tuning of model parameters, particularly for Random Forest and XGBoost, could improve performance even more.
-# - **Feature Engineering:** Investigate additional features or derived variables that could enhance model performance. For example, exploring interactions between features or incorporating external data sources.
-# - **Cross-Validation:** Implement more extensive cross-validation strategies to ensure robustness and generalizability of the models.
-# - **Integration into Clinical Practice:** Develop a pipeline for integrating the model into clinical decision-support systems. Conduct pilot studies to assess its practical utility in real-world settings.
-# - **Model Interpretability:** Enhance model interpretability to provide actionable insights for clinicians. Techniques like SHAP (SHapley Additive exPlanations) could be used to explain model predictions.
+# 4. Assumption Checking
+# Residual Analysis and Normality Check
+model = LinearRegression()
+model.fit(X_train, y_train)
+y_pred_train = model.predict(X_train)
+residuals = y_train - y_pred_train
 
-# 6. Ethical Considerations
-# - Ensure that the model's predictions are used to support, not replace, clinical judgment.
-# - Consider the potential implications of false positives and false negatives in a clinical setting.
+# Plot residuals
+plt.figure(figsize=(12, 6))
 
-# 7. References
-# - UCI Machine Learning Repository - Breast Cancer Wisconsin (Diagnostic) Dataset
-# - Relevant literature on machine learning models for medical diagnosis
+plt.subplot(1, 2, 1)
+plt.scatter(y_pred_train, residuals)
+plt.xlabel('Predicted Values')
+plt.ylabel('Residuals')
+plt.title('Residuals vs Predicted Values')
 
+plt.subplot(1, 2, 2)
+sm.qqplot(residuals, line='s')
+plt.title('Q-Q Plot of Residuals')
+
+plt.tight_layout()
+plt.show()
+
+# Conclusion:
+# The regression models were evaluated using Mean Squared Error (MSE) and R-Squared (R²) metrics. 
+# The Linear Regression model performed comparably to Ridge and Lasso regression, with an R² value of 0.784 and an MSE of 33,596,915 on the test set. 
+# Significant predictors of healthcare costs include smoking status, BMI, and age. These insights are valuable for healthcare providers aiming to optimize pricing and resource allocation.
+
+# Future Work:
+# - **Model Refinement:** Explore advanced models such as Gradient Boosting Machines or Neural Networks for potentially improved performance.
+# - **Feature Engineering:** Investigate additional features or interaction terms that may enhance model accuracy.
+# - **Deployment:** Consider deploying the model into a real-world application for ongoing cost prediction and optimization.
+# - **Ethical Considerations:** Address potential biases and ensure the model’s predictions are used fairly and ethically in healthcare settings.
