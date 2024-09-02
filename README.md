@@ -26,6 +26,12 @@ Accurate predictions in breast cancer diagnosis can lead to earlier intervention
 - **SHAP**: Applied to interpret complex model predictions and understand feature contributions.
 - **Matplotlib & Seaborn**: Utilized for data visualization, including model performance plots and feature importance graphs.
 
+## Dataset
+
+The dataset used in this case study is publicly available and can be accessed here:
+
+- **[Breast Cancer Wisconsin (Diagnostic) Data Set](https://www.kaggle.com/datasets/uciml/breast-cancer-wisconsin-data)**: This dataset contains features extracted from breast cancer images and corresponding diagnosis labels, which were used to train and evaluate the machine learning models in this project.
+
 ## Repository Contents
 
 - **`breast_cancer_diagnosis_annotated_code.py`**: Annotated code file containing the complete workflow for data preprocessing, model development, evaluation, and interpretability analysis.
