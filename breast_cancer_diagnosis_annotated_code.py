@@ -1,125 +1,188 @@
-# Healthcare Cost Prediction Using Regression Analysis
+# Breast Cancer Diagnosis Using Machine Learning
 
 # Objective:
-# Develop a regression model to predict healthcare costs using patient demographics, health metrics, and lifestyle factors. 
-# The focus is on identifying key cost drivers that help optimize pricing and resource allocation for healthcare providers and insurers.
+# Develop machine learning models to predict breast cancer diagnosis using diagnostic features from imaging data.
+# The focus is on accurately classifying tumors as benign or malignant to assist healthcare providers in making informed decisions and improving patient outcomes.
 
 # Key Points:
 # - End-to-end analysis covering data preprocessing, model development, and evaluation.
-# - Dataset: Kaggle - Medical Cost Personal Dataset
-# - Techniques: Linear regression, feature engineering, and performance evaluation (R²: 0.784, MSE: 33,596,915).
-# - Insights: Smoking status, BMI, and age are significant predictors of healthcare costs.
+# - Dataset: Kaggle - Breast Cancer Wisconsin (Diagnostic) Dataset.
+# - Techniques: Logistic Regression, Random Forest, and XGBoost.
+# - Performance Evaluation: Logistic Regression and Random Forest both achieved ROC-AUC scores of 1.00, while XGBoost achieved 0.99.
+# - Insights: Features such as radius, texture, and area were identified as the most significant predictors for breast cancer diagnosis.
 
 # Import necessary libraries
-import pandas as pd
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.metrics import mean_squared_error, r2_score
-import statsmodels.api as sm
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve, precision_recall_curve, auc, confusion_matrix, ConfusionMatrixDisplay
+import shap
+import os
+
+# Set the path to save the images
+save_path = r'C:\Users\JUDIT\Desktop\Data Sets'
 
 # 1. Data Loading and Overview
-# Load the dataset containing patient demographics, lifestyle factors, and healthcare charges
-file_path = r"C:\Users\YourUser\Desktop\Data Sets\insurance.csv"  # Update the path as needed
-df = pd.read_csv(file_path)
+# Load the dataset containing features derived from breast cancer images, along with diagnosis labels (M for Malignant, B for Benign)
+file_path = os.path.join(save_path, 'data.csv')
+try:
+    data = pd.read_csv(file_path)
+except FileNotFoundError as e:
+    print(f"Error loading file: {e}")
+    raise
 
-# Initial data overview: Understanding the structure and summary statistics of the dataset
-print(df.head())  # Display the first few rows of the dataset
-print(df.describe())  # Summary statistics for numerical features
-print(df.info())  # Information about data types and missing values
+# Display basic information about the dataset
+print("First 5 rows of the dataset:\n", data.head())
+print("Dataset description:\n", data.describe())
+print("Missing values in each column:\n", data.isnull().sum())
 
 # 2. Data Preprocessing
-# Convert 'sex' to numeric: 1 for male, 0 for female
-df['sex'] = df['sex'].apply(lambda x: 1 if x == 'male' else 0)
+# Drop unnecessary columns that do not contribute to the model's performance
+data.drop(['id', 'Unnamed: 32'], axis=1, inplace=True)
 
-# Convert 'smoker' to numeric: 1 for yes, 0 for no
-df['smoker'] = df['smoker'].apply(lambda x: 1 if x == 'yes' else 0)
+# Map 'diagnosis' column to binary labels (Malignant = 1, Benign = 0)
+data['diagnosis'] = data['diagnosis'].map({'M': 1, 'B': 0})
 
-# Drop the 'region' column as it is not needed for the analysis
-df.drop(columns=['region'], inplace=True)
+# Splitting features and target
+X = data.drop('diagnosis', axis=1)
+y = data['diagnosis']
 
-# Separate features and target variable
-X = df.drop(columns=['charges'])  # Features: 'age', 'sex', 'bmi', 'children', 'smoker'
-y = df['charges']  # Target variable
+# Identifying numeric features for scaling
+numeric_features = X.columns.tolist()
 
-# Standardize features for better model performance
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# Creating a pipeline for numeric features: scaling
+numeric_transformer = Pipeline(steps=[
+    ('scaler', StandardScaler())
+])
 
-# 3. Model Development and Evaluation
+# Applying the numeric transformer
+preprocessor = Pipeline(steps=[('num', numeric_transformer)])
 
-# Split data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+# 3. Data Splitting
+# Split the dataset into training (80%) and testing (20%) sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Initialize models
+# 4. Model Development: Logistic Regression, Random Forest, and XGBoost with Cross-Validation and Hyperparameter Tuning
+# Implementing k-fold cross-validation to improve model reliability
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+# Define models to be used in the pipeline
 models = {
-    'Linear Regression': LinearRegression(),
-    'Ridge Regression': Ridge(),
-    'Lasso Regression': Lasso()
+    'Logistic Regression': LogisticRegression(max_iter=10000),
+    'Random Forest': RandomForestClassifier(random_state=42),
+    'XGBoost': XGBClassifier(eval_metric='logloss', n_jobs=-1)
 }
 
-# Train and evaluate models
-results = {}
-for name, model in models.items():
-    # Fit the model
-    model.fit(X_train, y_train)
-    
-    # Predict and evaluate
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
-    results[name] = {
-        'MSE': mse,
-        'R²': r2
-    }
-    
-    print(f"{name} Results:")
-    print(f"Mean Squared Error (MSE): {mse}")
-    print(f"R-Squared (R²): {r2}")
-    print("-" * 30)
+# Function to train, evaluate, and visualize model performance
+def train_evaluate_model(model_name, model, X_train, y_train, X_test, y_test, kf):
+    pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                               ('classifier', model)])
 
-# Perform cross-validation
-kf = KFold(n_splits=10, random_state=42, shuffle=True)
-cv_results = {}
-for name, model in models.items():
-    cv_scores = cross_val_score(model, X_scaled, y, cv=kf, scoring='r2')
-    cv_results[name] = np.mean(cv_scores)
-    print(f"{name} Cross-Validation R²: {np.mean(cv_scores)}")
+    # Defining parameter grids for each model
+    param_grid = {}
+    if model_name == 'Logistic Regression':
+        param_grid = {'classifier__C': [0.01, 0.1, 1, 10, 100]}
+    elif model_name == 'Random Forest':
+        param_grid = {'classifier__n_estimators': [50, 100, 200],
+                      'classifier__max_depth': [None, 10, 20, 30]}
+    elif model_name == 'XGBoost':
+        param_grid = {'classifier__learning_rate': [0.01, 0.1, 0.3],
+                      'classifier__n_estimators': [50, 100, 200]}
 
-# 4. Assumption Checking
-# Residual Analysis and Normality Check
-model = LinearRegression()
-model.fit(X_train, y_train)
-y_pred_train = model.predict(X_train)
-residuals = y_train - y_pred_train
+    # Implementing GridSearchCV for hyperparameter tuning
+    grid_search = GridSearchCV(pipeline, param_grid, cv=kf, scoring='roc_auc', n_jobs=-1)
+    grid_search.fit(X_train, y_train)
 
-# Plot residuals
-plt.figure(figsize=(12, 6))
+    best_model = grid_search.best_estimator_
+    print(f"Best Parameters for {model_name}: {grid_search.best_params_}")
 
-plt.subplot(1, 2, 1)
-plt.scatter(y_pred_train, residuals)
-plt.xlabel('Predicted Values')
-plt.ylabel('Residuals')
-plt.title('Residuals vs Predicted Values')
+    # Making predictions on test set
+    y_pred = best_model.predict(X_test)
+    y_pred_proba = best_model.predict_proba(X_test)[:, 1]
 
-plt.subplot(1, 2, 2)
-sm.qqplot(residuals, line='s')
-plt.title('Q-Q Plot of Residuals')
+    # Generating classification report
+    print(f"\nClassification Report for {model_name}:\n", classification_report(y_test, y_pred))
 
-plt.tight_layout()
-plt.show()
+    # Calculating and displaying ROC-AUC score
+    roc_auc = roc_auc_score(y_test, y_pred_proba)
+    print(f"{model_name} ROC-AUC Score: {roc_auc:.2f}")
+
+    # Plotting ROC curve
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+    plt.figure()
+    plt.plot(fpr, tpr, label=f'{model_name} (area = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'ROC Curve - {model_name}')
+    plt.legend(loc="lower right")
+    plt.savefig(os.path.join(save_path, f'roc_curve_{model_name}.png'))
+    plt.show()
+
+    # Plotting Precision-Recall curve
+    precision, recall, _ = precision_recall_curve(y_test, y_pred_proba)
+    pr_auc = auc(recall, precision)
+    plt.figure()
+    plt.plot(recall, precision, label=f'PR Curve - {model_name} (area = {pr_auc:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {model_name}')
+    plt.legend(loc="lower left")
+    plt.savefig(os.path.join(save_path, f'precision_recall_curve_{model_name}.png'))
+    plt.show()
+
+    # Displaying the confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=best_model.classes_)
+    disp.plot()
+    plt.title(f'Confusion Matrix - {model_name}')
+    plt.savefig(os.path.join(save_path, f'confusion_matrix_{model_name}.png'))
+    plt.show()
+
+    return best_model
+
+# Loop through models to train, evaluate, and visualize performance
+for model_name, model in models.items():
+    best_model = train_evaluate_model(model_name, model, X_train, y_train, X_test, y_test, kf)
+
+    # Feature Importance for Logistic Regression
+    if model_name == 'Logistic Regression':
+        coef = best_model.named_steps['classifier'].coef_[0]
+        importance = pd.Series(coef, index=numeric_features)
+        
+        # Adjust the plot to make sure labels fit
+        plt.figure(figsize=(8, 6))
+        importance.nlargest(10).plot(kind='barh')
+        plt.title(f'Top 10 Important Features - {model_name}')
+        plt.xlabel('Coefficient Value')
+        plt.ylabel('Features')
+        
+        # Adjust the layout to ensure all labels are visible
+        plt.tight_layout()
+        
+        plt.savefig(os.path.join(save_path, f'feature_importance_{model_name}.png'))
+        plt.show()
+
+    # SHAP values for model interpretability
+    if model_name == 'XGBoost':
+        explainer = shap.TreeExplainer(best_model.named_steps['classifier'])
+        shap_values = explainer.shap_values(X_test)
+        shap.summary_plot(shap_values, X_test, feature_names=X_test.columns)
+        plt.savefig(os.path.join(save_path, f'shap_summary_{model_name}.png'))
+        plt.show()
 
 # Conclusion:
-# The regression models were evaluated using Mean Squared Error (MSE) and R-Squared (R²) metrics. 
-# The Linear Regression model performed comparably to Ridge and Lasso regression, with an R² value of 0.784 and an MSE of 33,596,915 on the test set. 
-# Significant predictors of healthcare costs include smoking status, BMI, and age. These insights are valuable for healthcare providers aiming to optimize pricing and resource allocation.
+# All three models—Logistic Regression, Random Forest, and XGBoost—demonstrated strong performance in classifying breast cancer as benign or malignant.
+# Logistic Regression and Random Forest achieved ROC-AUC scores of 1.00, while XGBoost achieved 0.99.
+# The models offer healthcare professionals a reliable method for predicting breast cancer, aiding in early diagnosis and treatment.
 
 # Future Work:
-# - **Model Refinement:** Explore advanced models such as Gradient Boosting Machines or Neural Networks for potentially improved performance.
-# - **Feature Engineering:** Investigate additional features or interaction terms that may enhance model accuracy.
-# - **Deployment:** Consider deploying the model into a real-world application for ongoing cost prediction and optimization.
-# - **Ethical Considerations:** Address potential biases and ensure the model’s predictions are used fairly and ethically in healthcare settings.
+# Further exploration could include adding more data, such as genetic information, or integrating the models into real-time clinical workflows.
+# Exploring ensemble methods that combine the strengths of these models could also yield improved results.
+# Additionally, error handling and scalability improvements could make the model more robust for deployment in clinical settings.
