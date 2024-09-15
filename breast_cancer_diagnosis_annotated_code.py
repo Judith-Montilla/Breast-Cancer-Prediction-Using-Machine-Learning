@@ -87,13 +87,13 @@ def train_evaluate_model(model_name, model, X_train, y_train, X_test, y_test, kf
     # Defining parameter grids for each model
     param_grid = {}
     if model_name == 'Logistic Regression':
-        param_grid = {'classifier__C': [0.01, 0.1, 1, 10, 100]}
+        param_grid = {'classifier__C': [0.01, 0.1, 1, 10, 100]}  # Range of regularization strengths
     elif model_name == 'Random Forest':
-        param_grid = {'classifier__n_estimators': [50, 100, 200],
-                      'classifier__max_depth': [None, 10, 20, 30]}
+        param_grid = {'classifier__n_estimators': [50, 100, 200],  # Number of trees in the forest
+                      'classifier__max_depth': [None, 10, 20, 30]}  # Depth of each tree
     elif model_name == 'XGBoost':
-        param_grid = {'classifier__learning_rate': [0.01, 0.1, 0.3],
-                      'classifier__n_estimators': [50, 100, 200]}
+        param_grid = {'classifier__learning_rate': [0.01, 0.1, 0.3],  # Learning rate for boosting
+                      'classifier__n_estimators': [50, 100, 200]}  # Number of boosting rounds
 
     # Implementing GridSearchCV for hyperparameter tuning
     grid_search = GridSearchCV(pipeline, param_grid, cv=kf, scoring='roc_auc', n_jobs=-1)
@@ -173,6 +173,8 @@ for model_name, model in models.items():
     if model_name == 'XGBoost':
         explainer = shap.TreeExplainer(best_model.named_steps['classifier'])
         shap_values = explainer.shap_values(X_test)
+        
+        # SHAP values are used for model interpretability, ensuring transparency in model decision-making.
         shap.summary_plot(shap_values, X_test, feature_names=X_test.columns)
         plt.savefig(os.path.join(save_path, f'shap_summary_{model_name}.png'))
         plt.show()
@@ -184,5 +186,4 @@ for model_name, model in models.items():
 
 # Future Work:
 # Further exploration could include adding more data, such as genetic information, or integrating the models into real-time clinical workflows.
-# Exploring ensemble methods that combine the strengths of these models could also yield improved results.
-# Additionally, error handling and scalability improvements could make the model more robust for deployment in clinical settings.
+# Exploring ensemble methods that combine the strengths of these models
